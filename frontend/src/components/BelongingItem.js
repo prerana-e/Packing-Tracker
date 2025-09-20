@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   CheckCircleIcon, 
   XCircleIcon, 
@@ -7,10 +7,25 @@ import {
   ArchiveBoxIcon 
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleIconSolid } from '@heroicons/react/24/solid';
+import { useTheme } from '../contexts/ThemeContext';
+import { useColorSystem } from '../hooks/useColorSystem';
 
 const BelongingItem = ({ belonging, onEdit, onDelete, onToggleStatus }) => {
-  const { id, name, category, tags, status } = belonging;
+  const { id, name, category, tags, status, priority = 'medium' } = belonging;
   const isPacked = status === 'packed';
+  const { colors } = useTheme();
+  const { getCategoryColors, getPriorityColors, getStatusColors } = useColorSystem();
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  const categoryColors = getCategoryColors(category);
+  const priorityColors = getPriorityColors(priority);
+  const statusColors = getStatusColors(status, category);
+
+  const handleToggleClick = async () => {
+    setIsAnimating(true);
+    await onToggleStatus(id, isPacked ? 'unpacked' : 'packed');
+    setTimeout(() => setIsAnimating(false), 600);
+  };
 
   const getSmartIcon = (itemName, category) => {
     const name = itemName.toLowerCase();
@@ -126,35 +141,54 @@ const BelongingItem = ({ belonging, onEdit, onDelete, onToggleStatus }) => {
     }
   };
 
-  const getStatusColor = (status) => {
-    return status === 'packed' 
-      ? 'text-success-600 bg-success-50 border-success-200' 
-      : 'text-gray-600 bg-gray-50 border-gray-200';
-  };
-
   return (
     <div 
       className={`
-        bg-white rounded-lg border-2 p-4 transition-all duration-200 hover:shadow-md cursor-pointer
-        ${isPacked ? 'border-success-200 bg-success-50/30' : 'border-gray-200'}
-        hover:bg-gray-50
+        relative overflow-hidden rounded-lg border-2 p-4 transition-all duration-300 cursor-pointer transform hover:scale-[1.02] group
+        ${statusColors.border} ${statusColors.bg}
+        hover:shadow-xl ${statusColors.glow}
+        ${isAnimating ? 'animate-bounce' : ''}
+        hover:-translate-y-1
       `}
-      onClick={() => onToggleStatus(id, isPacked ? 'unpacked' : 'packed')}
+      onClick={handleToggleClick}
     >
-      <div className="flex items-start justify-between">
+      {/* Priority indicator */}
+      {priority === 'high' && (
+        <div className={`absolute top-2 right-2 w-3 h-3 rounded-full ${priorityColors.indicator} ${priorityColors.pulse || ''}`} />
+      )}
+      
+      {/* Category gradient background */}
+      <div className={`
+        absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-5 transition-opacity duration-300
+        ${categoryColors.gradient}
+      `} />
+      
+      {/* Packing success animation overlay */}
+      {isAnimating && isPacked && (
+        <div className={`absolute inset-0 opacity-20 animate-pulse ${categoryColors.accent}`} />
+      )}
+      
+      <div className="relative z-10 flex items-start justify-between">
         <div className="flex-1 min-w-0">
           {/* Header with icon and name */}
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-2xl">{getSmartIcon(name, category)}</span>
+            <span className={`text-2xl transition-transform duration-300 ${isAnimating ? 'animate-spin' : ''} group-hover:scale-110`}>
+              {getSmartIcon(name, category)}
+            </span>
             <div className="flex-1 min-w-0">
               <h3 className={`
-                text-lg font-semibold truncate
-                ${isPacked ? 'text-gray-700 line-through' : 'text-gray-900'}
+                text-lg font-semibold truncate transition-all duration-300
+                ${isPacked 
+                  ? `${colors.text.secondary} line-through transform scale-95` 
+                  : `${statusColors.text} group-hover:scale-105`
+                }
               `}>
                 {name}
               </h3>
-              <p className="text-sm text-gray-500 capitalize">
+              <p className={`text-sm capitalize transition-colors duration-300 ${categoryColors.text} font-medium`}>
                 {category}
+                {priority === 'high' && <span className="ml-1">🔥</span>}
+                {priority === 'low' && <span className="ml-1">📅</span>}
               </p>
             </div>
           </div>
@@ -165,7 +199,12 @@ const BelongingItem = ({ belonging, onEdit, onDelete, onToggleStatus }) => {
               {tags.map((tag, index) => (
                 <span
                   key={index}
-                  className="inline-block px-2 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded-full"
+                  className={`
+                    inline-block px-2 py-1 text-xs font-medium rounded-full transition-all duration-300 transform hover:scale-105
+                    ${categoryColors.accent} ${categoryColors.text}
+                    animate-fadeIn border ${categoryColors.border}
+                  `}
+                  style={{ animationDelay: `${index * 100}ms` }}
                 >
                   {tag}
                 </span>
@@ -176,16 +215,33 @@ const BelongingItem = ({ belonging, onEdit, onDelete, onToggleStatus }) => {
           {/* Status Badge */}
           <div className="flex items-center gap-2">
             <span className={`
-              inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border
-              ${getStatusColor(status)}
+              inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full border transition-all duration-300 transform
+              ${isPacked 
+                ? `${colors.success.bg} ${colors.success.text} ${colors.success.border} scale-105 shadow-md` 
+                : `${statusColors.accent} ${statusColors.text} ${statusColors.border}`
+              }
+              group-hover:shadow-md
             `}>
               {isPacked ? (
-                <CheckCircleIconSolid className="h-3 w-3" />
+                <CheckCircleIconSolid className={`h-3 w-3 transition-transform duration-300 ${isAnimating ? 'animate-pulse' : ''}`} />
               ) : (
-                <ArchiveBoxIcon className="h-3 w-3" />
+                <ArchiveBoxIcon className="h-3 w-3 transition-transform duration-300 group-hover:scale-110" />
               )}
-              {isPacked ? 'Packed' : 'Unpacked'}
+              <span className="transition-all duration-300">
+                {isPacked ? 'Packed ✓' : 'Unpacked'}
+              </span>
             </span>
+            
+            {/* Priority indicator badge */}
+            {priority !== 'medium' && (
+              <span className={`
+                px-1.5 py-0.5 text-xs rounded-full font-bold border
+                ${priorityColors.bg} ${priorityColors.text} ${priorityColors.border}
+                ${priority === 'high' ? priorityColors.pulse || '' : ''}
+              `}>
+                {priority === 'high' ? '!' : priority === 'low' ? '~' : ''}
+              </span>
+            )}
           </div>
         </div>
 
@@ -194,21 +250,22 @@ const BelongingItem = ({ belonging, onEdit, onDelete, onToggleStatus }) => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onToggleStatus(id, isPacked ? 'unpacked' : 'packed');
+              handleToggleClick();
             }}
             className={`
-              p-2 rounded-full transition-colors
+              p-2 rounded-full transition-all duration-300 transform hover:scale-110 active:scale-95
               ${isPacked 
-                ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100' 
-                : 'text-success-600 hover:text-success-700 hover:bg-success-100'
+                ? `${colors.text.muted} hover:${colors.text.secondary} hover:${colors.bg.active}` 
+                : `${colors.success.text} hover:${colors.success.text} hover:${colors.success.bg}`
               }
+              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
             `}
             title={isPacked ? 'Mark as unpacked' : 'Mark as packed'}
           >
             {isPacked ? (
-              <XCircleIcon className="h-5 w-5" />
+              <XCircleIcon className={`h-5 w-5 transition-transform duration-300 ${isAnimating ? 'animate-pulse' : ''}`} />
             ) : (
-              <CheckCircleIcon className="h-5 w-5" />
+              <CheckCircleIcon className="h-5 w-5 transition-transform duration-300 hover:scale-110" />
             )}
           </button>
           
@@ -217,10 +274,14 @@ const BelongingItem = ({ belonging, onEdit, onDelete, onToggleStatus }) => {
               e.stopPropagation();
               onEdit(belonging);
             }}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            className={`
+              p-2 rounded-full transition-all duration-300 transform hover:scale-110 active:scale-95
+              ${colors.text.muted} hover:${colors.text.secondary} hover:${colors.bg.active}
+              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
+            `}
             title="Edit item"
           >
-            <PencilIcon className="h-5 w-5" />
+            <PencilIcon className="h-5 w-5 transition-transform duration-300 hover:rotate-12" />
           </button>
           
           <button
@@ -228,10 +289,14 @@ const BelongingItem = ({ belonging, onEdit, onDelete, onToggleStatus }) => {
               e.stopPropagation();
               onDelete(id);
             }}
-            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded-full transition-colors"
+            className={`
+              p-2 rounded-full transition-all duration-300 transform hover:scale-110 active:scale-95
+              ${colors.text.muted} hover:text-red-600 dark:hover:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50
+              focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500
+            `}
             title="Delete item"
           >
-            <TrashIcon className="h-5 w-5" />
+            <TrashIcon className="h-5 w-5 transition-all duration-300 hover:scale-110 hover:rotate-12" />
           </button>
         </div>
       </div>

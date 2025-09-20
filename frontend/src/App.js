@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import SearchBar from './components/SearchBar';
 import FilterControls from './components/FilterControls';
 import BelongingsList from './components/BelongingsList';
@@ -7,14 +8,28 @@ import BulkAddForm from './components/BulkAddForm';
 import QuickActions from './components/QuickActions';
 import Schedule from './components/Schedule';
 import Analytics from './components/Analytics';
+import ThemeToggle from './components/ThemeToggle';
+import ConfettiAnimation from './components/ConfettiAnimation';
+import AISuggestions from './components/AISuggestions';
 import { belongingsAPI } from './api';
 import { PlusIcon, HomeIcon, QueueListIcon, CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 
 function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
+function AppContent() {
+  const { colors } = useTheme();
   const [belongings, setBelongings] = useState([]);
   const [filteredBelongings, setFilteredBelongings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -87,6 +102,16 @@ function App() {
   useEffect(() => {
     applyFilters();
   }, [applyFilters]);
+
+  // Check for completion and trigger confetti
+  useEffect(() => {
+    const packedCount = belongings.filter(item => item.status === 'packed').length;
+    const totalCount = belongings.length;
+    
+    if (totalCount > 0 && packedCount === totalCount && packedCount > 0) {
+      setShowConfetti(true);
+    }
+  }, [belongings]);
 
   const fetchBelongings = async () => {
     try {
@@ -175,16 +200,15 @@ function App() {
   };
 
   const handleDeleteBelonging = async (id) => {
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      try {
-        await belongingsAPI.delete(id);
-        await fetchBelongings();
-        await fetchCategories();
-        await fetchTags();
-      } catch (err) {
-        console.error('Error deleting belonging:', err);
-        setError('Failed to delete belonging');
-      }
+    // Remove confirmation dialog
+    try {
+      await belongingsAPI.delete(id);
+      await fetchBelongings();
+      await fetchCategories();
+      await fetchTags();
+    } catch (err) {
+      console.error('Error deleting belonging:', err);
+      setError('Failed to delete belonging');
     }
   };
 
@@ -217,6 +241,28 @@ function App() {
   const handleSelectAll = () => {
     // For now, just clear filters to show all items
     clearFilters();
+  };
+
+  const handleAddSuggestion = async (suggestion) => {
+    try {
+      const newItem = {
+        name: suggestion.name,
+        category: suggestion.category,
+        tags: suggestion.reason ? [suggestion.reason] : [],
+        status: 'unpacked',
+        priority: suggestion.priority || 'medium'
+      };
+      
+      await belongingsAPI.create(newItem);
+      await loadBelongings();
+      
+      // Show success feedback
+      setSuccessMessage(`✅ Added "${suggestion.name}" to your packing list!`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error adding suggestion:', err);
+      setError('Failed to add suggested item');
+    }
   };
 
   const handleMarkAllPacked = async () => {
@@ -273,68 +319,73 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen transition-colors duration-300 ${colors.bg.primary}`}>
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className={`shadow-sm border-b transition-colors duration-300 ${colors.bg.secondary} ${colors.border.primary}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <HomeIcon className="h-8 w-8 text-primary-600" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Packing Tracker</h1>
-                <p className="text-sm text-gray-500">Organize your college belongings</p>
+                <h1 className={`text-xl font-bold transition-colors duration-300 ${colors.text.primary}`}>Packing Tracker</h1>
+                <p className={`text-sm transition-colors duration-300 ${colors.text.secondary}`}>Organize your college belongings</p>
               </div>
             </div>
             
-            {/* Navigation */}
-            <nav className="hidden md:flex items-center space-x-4">
-              <button
-                onClick={() => setCurrentPage('packing')}
-                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  currentPage === 'packing'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                Packing List
-              </button>
-              <button
-                onClick={() => setCurrentPage('schedule')}
-                className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  currentPage === 'schedule'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <CalendarDaysIcon className="h-4 w-4" />
-                Schedule
-              </button>
-              <button
-                onClick={() => setCurrentPage('analytics')}
-                className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  currentPage === 'analytics'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
-              >
-                <ChartBarIcon className="h-4 w-4" />
-                Analytics
-              </button>
-            </nav>
+            <div className="flex items-center gap-4">
+              {/* Theme Toggle */}
+              <ThemeToggle />
+              
+              {/* Navigation */}
+              <nav className="hidden md:flex items-center space-x-4">
+                <button
+                  onClick={() => setCurrentPage('packing')}
+                  className={`px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    currentPage === 'packing'
+                      ? `${colors.primary.bg} ${colors.primary.text}`
+                      : `${colors.text.secondary} ${colors.bg.hover}`
+                  }`}
+                >
+                  Packing List
+                </button>
+                <button
+                  onClick={() => setCurrentPage('schedule')}
+                  className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    currentPage === 'schedule'
+                      ? `${colors.primary.bg} ${colors.primary.text}`
+                      : `${colors.text.secondary} ${colors.bg.hover}`
+                  }`}
+                >
+                    <CalendarDaysIcon className="h-4 w-4" />
+                  Schedule
+                </button>
+                <button
+                  onClick={() => setCurrentPage('analytics')}
+                  className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                    currentPage === 'analytics'
+                      ? `${colors.primary.bg} ${colors.primary.text}`
+                      : `${colors.text.secondary} ${colors.bg.hover}`
+                  }`}
+                >
+                  <ChartBarIcon className="h-4 w-4" />
+                  Analytics
+                </button>
+              </nav>
+            </div>
             
             <div className="flex items-center gap-2">
               {currentPage === 'packing' && (
                 <>
                   <button
                     onClick={handleBulkAdd}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95 ${colors.primary.button} text-white`}
                   >
                     <QueueListIcon className="h-5 w-5" />
                     <span className="hidden sm:inline">Bulk Add</span>
                   </button>
                   <button
                     onClick={handleAddBelonging}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95 ${colors.success.button} text-white`}
                   >
                     <PlusIcon className="h-5 w-5" />
                     <span className="hidden sm:inline">Add Item</span>
@@ -353,20 +404,20 @@ function App() {
           <nav className="flex space-x-2">
             <button
               onClick={() => setCurrentPage('packing')}
-              className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                 currentPage === 'packing'
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? `${colors.primary.bg} ${colors.primary.text}`
+                  : `${colors.text.secondary} ${colors.bg.hover}`
               }`}
             >
               Packing
             </button>
             <button
               onClick={() => setCurrentPage('schedule')}
-              className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                 currentPage === 'schedule'
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? `${colors.primary.bg} ${colors.primary.text}`
+                  : `${colors.text.secondary} ${colors.bg.hover}`
               }`}
             >
               <CalendarDaysIcon className="h-4 w-4" />
@@ -374,10 +425,10 @@ function App() {
             </button>
             <button
               onClick={() => setCurrentPage('analytics')}
-              className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                 currentPage === 'analytics'
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  ? `${colors.primary.bg} ${colors.primary.text}`
+                  : `${colors.text.secondary} ${colors.bg.hover}`
               }`}
             >
               <ChartBarIcon className="h-4 w-4" />
@@ -385,6 +436,19 @@ function App() {
             </button>
           </nav>
         </div>
+
+        {/* Success/Error Messages */}
+        {successMessage && (
+          <div className="mb-6 p-4 bg-green-100 border border-green-200 text-green-800 rounded-lg shadow-sm animate-slideInDown">
+            {successMessage}
+          </div>
+        )}
+        
+        {error && (
+          <div className="mb-6 p-4 bg-red-100 border border-red-200 text-red-800 rounded-lg shadow-sm">
+            {error}
+          </div>
+        )}
 
         {currentPage === 'packing' ? (
           <>
@@ -423,6 +487,13 @@ function App() {
               onClearFilters={clearFilters}
               belongings={belongings}
               filteredBelongings={filteredBelongings}
+            />
+
+            {/* AI Suggestions */}
+            <AISuggestions
+              belongings={belongings}
+              onAddSuggestion={handleAddSuggestion}
+              className="mb-6"
             />
 
             {/* Results Summary */}
@@ -478,6 +549,12 @@ function App() {
         onSubmit={handleBulkSubmit}
         categories={categories}
         existingTags={tags}
+      />
+
+      {/* Confetti Animation */}
+      <ConfettiAnimation 
+        show={showConfetti} 
+        onComplete={() => setShowConfetti(false)} 
       />
     </div>
   );
