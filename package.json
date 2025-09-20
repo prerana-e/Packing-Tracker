@@ -1,0 +1,24 @@
+{
+  "name": "packing-tracker",
+  "version": "1.0.0",
+  "description": "Full-stack Packing Tracker application",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --prefix-colors \"bgBlue.bold,bgMagenta.bold\" --prefix \"[{name}]\" --names \"backend,frontend\" \"npm run server\" \"npm run client\"",
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm start",
+    "start": "concurrently --prefix-colors \"bgBlue.bold,bgMagenta.bold\" --prefix \"[{name}]\" --names \"backend,frontend\" \"npm run server\" \"npm run client\"",
+    "install-server": "cd backend && npm install",
+    "install-client": "cd frontend && npm install",
+    "install-all": "npm run install-server && npm run install-client",
+    "build": "cd frontend && npm run build",
+    "server-only": "cd backend && npm start",
+    "client-only": "cd frontend && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["packing", "tracker", "react", "express", "sqlite"],
+  "author": "",
+  "license": "MIT"
+}
