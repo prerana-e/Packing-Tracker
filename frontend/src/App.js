@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import SearchBar from './components/SearchBar';
 import FilterControls from './components/FilterControls';
 import BelongingsList from './components/BelongingsList';
 import BelongingForm from './components/BelongingForm';
 import BulkAddForm from './components/BulkAddForm';
+import QuickActions from './components/QuickActions';
 import Schedule from './components/Schedule';
+import Analytics from './components/Analytics';
 import { belongingsAPI } from './api';
-import { PlusIcon, HomeIcon, QueueListIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, HomeIcon, QueueListIcon, CalendarDaysIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 
 function App() {
   const [belongings, setBelongings] = useState([]);
@@ -32,17 +34,59 @@ function App() {
   const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState([]);
 
+  // Load data functions wrapped in useCallback to prevent infinite re-renders
+  const loadBelongings = useCallback(async () => {
+    await fetchBelongings();
+    await fetchCategories();
+    await fetchTags();
+  }, []);
+
+  const loadScheduleEvents = useCallback(async () => {
+    // Add schedule events loading if needed
+    // For now, this is a placeholder
+  }, []);
+
+  // Apply filters function
+  const applyFilters = useCallback(() => {
+    let filtered = [...belongings];
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Apply category filter
+    if (selectedCategory) {
+      filtered = filtered.filter(item => item.category === selectedCategory);
+    }
+
+    // Apply tag filter
+    if (selectedTag) {
+      filtered = filtered.filter(item =>
+        item.tags && item.tags.includes(selectedTag)
+      );
+    }
+
+    // Apply status filter
+    if (selectedStatus) {
+      filtered = filtered.filter(item => item.status === selectedStatus);
+    }
+
+    setFilteredBelongings(filtered);
+  }, [belongings, searchTerm, selectedCategory, selectedTag, selectedStatus]);
+
   // Fetch belongings on component mount
   useEffect(() => {
-    fetchBelongings();
-    fetchCategories();
-    fetchTags();
-  }, []);
+    loadBelongings();
+    loadScheduleEvents();
+  }, [loadBelongings, loadScheduleEvents]);
 
   // Apply filters whenever belongings or filter criteria change
   useEffect(() => {
     applyFilters();
-  }, [belongings, searchTerm, selectedCategory, selectedTag, selectedStatus]);
+  }, [applyFilters]);
 
   const fetchBelongings = async () => {
     try {
@@ -74,36 +118,6 @@ function App() {
     } catch (err) {
       console.error('Error fetching tags:', err);
     }
-  };
-
-  const applyFilters = () => {
-    let filtered = [...belongings];
-
-    // Apply search filter
-    if (searchTerm) {
-      filtered = filtered.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // Apply category filter
-    if (selectedCategory) {
-      filtered = filtered.filter(item => item.category === selectedCategory);
-    }
-
-    // Apply tag filter
-    if (selectedTag) {
-      filtered = filtered.filter(item =>
-        item.tags && item.tags.includes(selectedTag)
-      );
-    }
-
-    // Apply status filter
-    if (selectedStatus) {
-      filtered = filtered.filter(item => item.status === selectedStatus);
-    }
-
-    setFilteredBelongings(filtered);
   };
 
   const handleAddBelonging = () => {
@@ -199,6 +213,44 @@ function App() {
     setSelectedStatus('');
   };
 
+  // Quick action functions
+  const handleSelectAll = () => {
+    // For now, just clear filters to show all items
+    clearFilters();
+  };
+
+  const handleMarkAllPacked = async () => {
+    if (window.confirm(`Mark all ${filteredBelongings.length} visible items as packed?`)) {
+      try {
+        const updatePromises = filteredBelongings
+          .filter(item => item.status !== 'packed')
+          .map(item => belongingsAPI.update(item.id, { ...item, status: 'packed' }));
+        
+        await Promise.all(updatePromises);
+        await fetchBelongings();
+      } catch (err) {
+        console.error('Error marking all as packed:', err);
+        setError('Failed to mark all items as packed');
+      }
+    }
+  };
+
+  const handleMarkAllUnpacked = async () => {
+    if (window.confirm(`Mark all ${filteredBelongings.length} visible items as unpacked?`)) {
+      try {
+        const updatePromises = filteredBelongings
+          .filter(item => item.status !== 'unpacked')
+          .map(item => belongingsAPI.update(item.id, { ...item, status: 'unpacked' }));
+        
+        await Promise.all(updatePromises);
+        await fetchBelongings();
+      } catch (err) {
+        console.error('Error marking all as unpacked:', err);
+        setError('Failed to mark all items as unpacked');
+      }
+    }
+  };
+
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -257,6 +309,17 @@ function App() {
                 <CalendarDaysIcon className="h-4 w-4" />
                 Schedule
               </button>
+              <button
+                onClick={() => setCurrentPage('analytics')}
+                className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  currentPage === 'analytics'
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <ChartBarIcon className="h-4 w-4" />
+                Analytics
+              </button>
             </nav>
             
             <div className="flex items-center gap-2">
@@ -287,7 +350,7 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Mobile Navigation */}
         <div className="md:hidden mb-6">
-          <nav className="flex space-x-4">
+          <nav className="flex space-x-2">
             <button
               onClick={() => setCurrentPage('packing')}
               className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
@@ -296,7 +359,7 @@ function App() {
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
-              Packing List
+              Packing
             </button>
             <button
               onClick={() => setCurrentPage('schedule')}
@@ -308,6 +371,17 @@ function App() {
             >
               <CalendarDaysIcon className="h-4 w-4" />
               Schedule
+            </button>
+            <button
+              onClick={() => setCurrentPage('analytics')}
+              className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                currentPage === 'analytics'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <ChartBarIcon className="h-4 w-4" />
+              Analytics
             </button>
           </nav>
         </div>
@@ -339,6 +413,18 @@ function App() {
               </div>
             </div>
 
+            {/* Quick Actions */}
+            <QuickActions
+              onAddNew={handleAddBelonging}
+              onBulkAdd={handleBulkAdd}
+              onSelectAll={handleSelectAll}
+              onMarkAllPacked={handleMarkAllPacked}
+              onMarkAllUnpacked={handleMarkAllUnpacked}
+              onClearFilters={clearFilters}
+              belongings={belongings}
+              filteredBelongings={filteredBelongings}
+            />
+
             {/* Results Summary */}
             <div className="mb-6">
               <p className="text-sm text-gray-600">
@@ -360,12 +446,15 @@ function App() {
               loading={loading}
             />
           </>
-        ) : (
+        ) : currentPage === 'schedule' ? (
           /* Schedule Page */
           <Schedule
             belongings={belongings}
             onBelongingUpdate={handleBelongingUpdate}
           />
+        ) : (
+          /* Analytics Page */
+          <Analytics />
         )}
       </main>
 

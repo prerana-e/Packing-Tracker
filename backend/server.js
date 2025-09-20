@@ -541,6 +541,201 @@ app.get('/api/schedule/events/:id/belongings', (req, res) => {
   });
 });
 
+// ANALYTICS ENDPOINTS
+
+// GET analytics overview
+app.get('/api/analytics/overview', (req, res) => {
+  const promises = [
+    // Total items and status breakdown
+    new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          COUNT(*) as total_items,
+          SUM(CASE WHEN status = 'packed' THEN 1 ELSE 0 END) as packed_items,
+          SUM(CASE WHEN status = 'unpacked' THEN 1 ELSE 0 END) as unpacked_items
+        FROM belongings
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows[0]);
+      });
+    }),
+    
+    // Category breakdown
+    new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          category,
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'packed' THEN 1 ELSE 0 END) as packed,
+          SUM(CASE WHEN status = 'unpacked' THEN 1 ELSE 0 END) as unpacked
+        FROM belongings 
+        GROUP BY category 
+        ORDER BY total DESC
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    }),
+    
+    // Schedule events count
+    new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          day_type,
+          COUNT(*) as event_count
+        FROM schedule_events 
+        GROUP BY day_type
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    }),
+    
+    // Recent activity (last 7 days)
+    new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          DATE(updated_at) as date,
+          COUNT(*) as items_updated
+        FROM belongings 
+        WHERE updated_at >= datetime('now', '-7 days')
+        GROUP BY DATE(updated_at)
+        ORDER BY date DESC
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    })
+  ];
+  
+  Promise.all(promises)
+    .then(([overview, categories, scheduleEvents, recentActivity]) => {
+      res.json({
+        overview,
+        categories,
+        scheduleEvents,
+        recentActivity
+      });
+    })
+    .catch(err => {
+      res.status(500).json({ error: err.message });
+    });
+});
+
+// GET packing progress over time
+app.get('/api/analytics/progress', (req, res) => {
+  const query = `
+    SELECT 
+      DATE(updated_at) as date,
+      COUNT(*) as total_items,
+      SUM(CASE WHEN status = 'packed' THEN 1 ELSE 0 END) as packed_items
+    FROM belongings 
+    WHERE updated_at >= datetime('now', '-30 days')
+    GROUP BY DATE(updated_at)
+    ORDER BY date ASC
+  `;
+  
+  db.all(query, (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    
+    res.json(rows);
+  });
+});
+
+// GET tag popularity
+app.get('/api/analytics/tags', (req, res) => {
+  db.all('SELECT tags FROM belongings WHERE tags != "[]"', (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    
+    const tagCounts = {};
+    rows.forEach(row => {
+      const tags = JSON.parse(row.tags || '[]');
+      tags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
+    });
+    
+    const sortedTags = Object.entries(tagCounts)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Top 10 tags
+    
+    res.json(sortedTags);
+  });
+});
+
+// GET schedule analytics
+app.get('/api/analytics/schedule', (req, res) => {
+  const promises = [
+    // Events by time of day
+    new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          CAST(substr(start_time, 1, 2) AS INTEGER) as hour,
+          COUNT(*) as event_count
+        FROM schedule_events 
+        GROUP BY hour
+        ORDER BY hour
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    }),
+    
+    // Average event duration by day type
+    new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          day_type,
+          COUNT(*) as event_count,
+          AVG(
+            (CAST(substr(end_time, 1, 2) AS INTEGER) * 60 + CAST(substr(end_time, 4, 2) AS INTEGER)) -
+            (CAST(substr(start_time, 1, 2) AS INTEGER) * 60 + CAST(substr(start_time, 4, 2) AS INTEGER))
+          ) as avg_duration_minutes
+        FROM schedule_events 
+        GROUP BY day_type
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    }),
+    
+    // Events with linked items
+    new Promise((resolve, reject) => {
+      db.all(`
+        SELECT 
+          se.day_type,
+          COUNT(DISTINCT se.id) as total_events,
+          COUNT(DISTINCT CASE WHEN eb.event_id IS NOT NULL THEN se.id END) as events_with_items
+        FROM schedule_events se
+        LEFT JOIN event_belongings eb ON se.id = eb.event_id
+        GROUP BY se.day_type
+      `, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    })
+  ];
+  
+  Promise.all(promises)
+    .then(([timeDistribution, duration, linkedItems]) => {
+      res.json({
+        timeDistribution,
+        duration,
+        linkedItems
+      });
+    })
+    .catch(err => {
+      res.status(500).json({ error: err.message });
+    });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Packing Tracker API is running' });

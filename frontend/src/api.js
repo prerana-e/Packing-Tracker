@@ -55,4 +55,18 @@ export const scheduleAPI = {
   getEventBelongings: (id) => api.get(`/schedule/events/${id}/belongings`),
 };
 
+export const analyticsAPI = {
+  // Get analytics overview (summary stats, categories, schedule events, recent activity)
+  getOverview: () => api.get('/analytics/overview'),
+  
+  // Get packing progress over time
+  getProgress: () => api.get('/analytics/progress'),
+  
+  // Get tag popularity statistics
+  getTagStats: () => api.get('/analytics/tags'),
+  
+  // Get schedule analytics
+  getScheduleAnalytics: () => api.get('/analytics/schedule'),
+};
+
 export default api;

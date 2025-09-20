@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { XMarkIcon, PlusIcon, TagIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TagIcon, LightBulbIcon } from '@heroicons/react/24/outline';
 
 const BelongingForm = ({ 
   belonging, 
@@ -17,6 +17,55 @@ const BelongingForm = ({
   });
   const [newTag, setNewTag] = useState('');
   const [showTagInput, setShowTagInput] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestedTags, setSuggestedTags] = useState([]);
+
+  // Smart suggestions based on item name
+  const getSmartSuggestions = (itemName) => {
+    const name = itemName.toLowerCase();
+    const suggestions = {
+      category: '',
+      tags: []
+    };
+
+    // Category suggestions
+    if (name.includes('laptop') || name.includes('phone') || name.includes('charger') || name.includes('cable') || name.includes('mouse') || name.includes('keyboard')) {
+      suggestions.category = 'electronics';
+      suggestions.tags = ['tech', 'fragile', 'important'];
+    } else if (name.includes('shirt') || name.includes('pants') || name.includes('dress') || name.includes('jeans') || name.includes('jacket') || name.includes('shoes')) {
+      suggestions.category = 'clothes';
+      suggestions.tags = ['seasonal', 'everyday'];
+    } else if (name.includes('book') || name.includes('novel') || name.includes('textbook') || name.includes('magazine')) {
+      suggestions.category = 'books';
+      suggestions.tags = ['entertainment', 'reference'];
+    } else if (name.includes('plate') || name.includes('cup') || name.includes('bowl') || name.includes('pot') || name.includes('pan') || name.includes('knife') || name.includes('fork')) {
+      suggestions.category = 'kitchenware';
+      suggestions.tags = ['fragile', 'essential'];
+    } else if (name.includes('sheet') || name.includes('pillow') || name.includes('blanket') || name.includes('mattress')) {
+      suggestions.category = 'bedding';
+      suggestions.tags = ['comfort', 'essential'];
+    } else if (name.includes('passport') || name.includes('license') || name.includes('certificate') || name.includes('contract') || name.includes('document')) {
+      suggestions.category = 'documents';
+      suggestions.tags = ['important', 'secure'];
+    } else if (name.includes('shampoo') || name.includes('soap') || name.includes('toothbrush') || name.includes('towel')) {
+      suggestions.category = 'toiletries';
+      suggestions.tags = ['daily-use', 'personal'];
+    }
+
+    return suggestions;
+  };
+
+  // Update suggestions when name changes
+  useEffect(() => {
+    if (formData.name.length > 2) {
+      const smartSuggestions = getSmartSuggestions(formData.name);
+      setSuggestions(smartSuggestions);
+      setSuggestedTags(smartSuggestions.tags);
+    } else {
+      setSuggestions({ category: '', tags: [] });
+      setSuggestedTags([]);
+    }
+  }, [formData.name]);
 
   // Initialize form data when belonging changes
   useEffect(() => {
@@ -122,6 +171,57 @@ const BelongingForm = ({
               required
             />
           </div>
+
+          {/* Smart Suggestions */}
+          {(suggestions.category || suggestedTags.length > 0) && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <LightBulbIcon className="h-5 w-5 text-blue-600" />
+                <span className="text-sm font-medium text-blue-900">Smart Suggestions</span>
+              </div>
+              
+              {suggestions.category && (
+                <div className="mb-3">
+                  <p className="text-sm text-blue-800 mb-2">Suggested category:</p>
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, category: suggestions.category }))}
+                    className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 text-sm font-medium rounded-full transition-colors"
+                  >
+                    {suggestions.category.charAt(0).toUpperCase() + suggestions.category.slice(1)}
+                  </button>
+                </div>
+              )}
+              
+              {suggestedTags.length > 0 && (
+                <div>
+                  <p className="text-sm text-blue-800 mb-2">Suggested tags:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedTags.map(tag => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          if (!formData.tags.includes(tag)) {
+                            setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+                          }
+                        }}
+                        className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                          formData.tags.includes(tag)
+                            ? 'bg-blue-200 text-blue-900 cursor-not-allowed'
+                            : 'bg-blue-100 hover:bg-blue-200 text-blue-800'
+                        }`}
+                        disabled={formData.tags.includes(tag)}
+                      >
+                        {tag}
+                        {formData.tags.includes(tag) && <span className="ml-1">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Category */}
           <div>
