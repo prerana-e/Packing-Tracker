@@ -4,8 +4,9 @@ import FilterControls from './components/FilterControls';
 import BelongingsList from './components/BelongingsList';
 import BelongingForm from './components/BelongingForm';
 import BulkAddForm from './components/BulkAddForm';
+import Schedule from './components/Schedule';
 import { belongingsAPI } from './api';
-import { PlusIcon, HomeIcon, QueueListIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, HomeIcon, QueueListIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
 
 function App() {
   const [belongings, setBelongings] = useState([]);
@@ -17,6 +18,9 @@ function App() {
   const [showForm, setShowForm] = useState(false);
   const [showBulkForm, setShowBulkForm] = useState(false);
   const [editingBelonging, setEditingBelonging] = useState(null);
+  
+  // Navigation state
+  const [currentPage, setCurrentPage] = useState('packing');
   
   // Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -183,6 +187,11 @@ function App() {
     }
   };
 
+  // Helper function for schedule page to update belongings
+  const handleBelongingUpdate = async (id, newStatus) => {
+    await handleToggleStatus(id, newStatus);
+  };
+
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedCategory('');
@@ -224,21 +233,51 @@ function App() {
                 <p className="text-sm text-gray-500">Organize your college belongings</p>
               </div>
             </div>
+            
+            {/* Navigation */}
+            <nav className="hidden md:flex items-center space-x-4">
+              <button
+                onClick={() => setCurrentPage('packing')}
+                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  currentPage === 'packing'
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                Packing List
+              </button>
+              <button
+                onClick={() => setCurrentPage('schedule')}
+                className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  currentPage === 'schedule'
+                    ? 'bg-primary-100 text-primary-700'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                <CalendarDaysIcon className="h-4 w-4" />
+                Schedule
+              </button>
+            </nav>
+            
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleBulkAdd}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <QueueListIcon className="h-5 w-5" />
-                <span className="hidden sm:inline">Bulk Add</span>
-              </button>
-              <button
-                onClick={handleAddBelonging}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              >
-                <PlusIcon className="h-5 w-5" />
-                <span className="hidden sm:inline">Add Item</span>
-              </button>
+              {currentPage === 'packing' && (
+                <>
+                  <button
+                    onClick={handleBulkAdd}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <QueueListIcon className="h-5 w-5" />
+                    <span className="hidden sm:inline">Bulk Add</span>
+                  </button>
+                  <button
+                    onClick={handleAddBelonging}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    <PlusIcon className="h-5 w-5" />
+                    <span className="hidden sm:inline">Add Item</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -246,51 +285,88 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Search and Filters */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="space-y-4">
-            {/* Search Bar */}
-            <SearchBar
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              placeholder="Search your belongings..."
-            />
-            
-            {/* Filters */}
-            <FilterControls
-              categories={categories}
-              tags={tags}
-              selectedCategory={selectedCategory}
-              selectedTag={selectedTag}
-              selectedStatus={selectedStatus}
-              onCategoryChange={setSelectedCategory}
-              onTagChange={setSelectedTag}
-              onStatusChange={setSelectedStatus}
-              onClearFilters={clearFilters}
-            />
-          </div>
+        {/* Mobile Navigation */}
+        <div className="md:hidden mb-6">
+          <nav className="flex space-x-4">
+            <button
+              onClick={() => setCurrentPage('packing')}
+              className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                currentPage === 'packing'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              Packing List
+            </button>
+            <button
+              onClick={() => setCurrentPage('schedule')}
+              className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                currentPage === 'schedule'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <CalendarDaysIcon className="h-4 w-4" />
+              Schedule
+            </button>
+          </nav>
         </div>
 
-        {/* Results Summary */}
-        <div className="mb-6">
-          <p className="text-sm text-gray-600">
-            Showing {filteredBelongings.length} of {belongings.length} items
-            {(searchTerm || selectedCategory || selectedTag || selectedStatus) && (
-              <span className="ml-1">
-                (filtered)
-              </span>
-            )}
-          </p>
-        </div>
+        {currentPage === 'packing' ? (
+          <>
+            {/* Search and Filters */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+              <div className="space-y-4">
+                {/* Search Bar */}
+                <SearchBar
+                  searchTerm={searchTerm}
+                  onSearchChange={setSearchTerm}
+                  placeholder="Search your belongings..."
+                />
+                
+                {/* Filters */}
+                <FilterControls
+                  categories={categories}
+                  tags={tags}
+                  selectedCategory={selectedCategory}
+                  selectedTag={selectedTag}
+                  selectedStatus={selectedStatus}
+                  onCategoryChange={setSelectedCategory}
+                  onTagChange={setSelectedTag}
+                  onStatusChange={setSelectedStatus}
+                  onClearFilters={clearFilters}
+                />
+              </div>
+            </div>
 
-        {/* Belongings List */}
-        <BelongingsList
-          belongings={filteredBelongings}
-          onEdit={handleEditBelonging}
-          onDelete={handleDeleteBelonging}
-          onToggleStatus={handleToggleStatus}
-          loading={loading}
-        />
+            {/* Results Summary */}
+            <div className="mb-6">
+              <p className="text-sm text-gray-600">
+                Showing {filteredBelongings.length} of {belongings.length} items
+                {(searchTerm || selectedCategory || selectedTag || selectedStatus) && (
+                  <span className="ml-1">
+                    (filtered)
+                  </span>
+                )}
+              </p>
+            </div>
+
+            {/* Belongings List */}
+            <BelongingsList
+              belongings={filteredBelongings}
+              onEdit={handleEditBelonging}
+              onDelete={handleDeleteBelonging}
+              onToggleStatus={handleToggleStatus}
+              loading={loading}
+            />
+          </>
+        ) : (
+          /* Schedule Page */
+          <Schedule
+            belongings={belongings}
+            onBelongingUpdate={handleBelongingUpdate}
+          />
+        )}
       </main>
 
       {/* Form Modal */}

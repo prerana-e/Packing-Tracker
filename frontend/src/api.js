@@ -35,4 +35,24 @@ export const belongingsAPI = {
   getTags: () => api.get('/tags'),
 };
 
+export const scheduleAPI = {
+  // Get all schedule events with optional day type filter
+  getEvents: (params = {}) => api.get('/schedule/events', { params }),
+  
+  // Get single event by ID
+  getEventById: (id) => api.get(`/schedule/events/${id}`),
+  
+  // Create new event
+  createEvent: (event) => api.post('/schedule/events', event),
+  
+  // Update event
+  updateEvent: (id, event) => api.put(`/schedule/events/${id}`, event),
+  
+  // Delete event
+  deleteEvent: (id) => api.delete(`/schedule/events/${id}`),
+  
+  // Get belongings for a specific event
+  getEventBelongings: (id) => api.get(`/schedule/events/${id}/belongings`),
+};
+
 export default api;

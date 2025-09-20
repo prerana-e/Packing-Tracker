@@ -29,6 +29,33 @@ db.serialize(() => {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  
+  // Schedule events table
+  db.run(`
+    CREATE TABLE IF NOT EXISTS schedule_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      day_type TEXT NOT NULL CHECK(day_type IN ('packing', 'move-in')),
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Junction table for many-to-many relationship between events and belongings
+  db.run(`
+    CREATE TABLE IF NOT EXISTS event_belongings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL,
+      belonging_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (event_id) REFERENCES schedule_events (id) ON DELETE CASCADE,
+      FOREIGN KEY (belonging_id) REFERENCES belongings (id) ON DELETE CASCADE,
+      UNIQUE(event_id, belonging_id)
+    )
+  `);
 });
 
 // Routes
@@ -277,6 +304,240 @@ app.get('/api/tags', (req, res) => {
     });
     
     res.json([...allTags].sort());
+  });
+});
+
+// SCHEDULE EVENTS ENDPOINTS
+
+// GET all schedule events
+app.get('/api/schedule/events', (req, res) => {
+  const { day_type } = req.query;
+  
+  let query = `
+    SELECT se.*, 
+           GROUP_CONCAT(eb.belonging_id) as belonging_ids,
+           GROUP_CONCAT(b.name) as belonging_names
+    FROM schedule_events se
+    LEFT JOIN event_belongings eb ON se.id = eb.event_id
+    LEFT JOIN belongings b ON eb.belonging_id = b.id
+  `;
+  
+  let params = [];
+  
+  if (day_type) {
+    query += ' WHERE se.day_type = ?';
+    params.push(day_type);
+  }
+  
+  query += ' GROUP BY se.id ORDER BY se.start_time';
+  
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    
+    const events = rows.map(row => ({
+      ...row,
+      belonging_ids: row.belonging_ids ? row.belonging_ids.split(',').map(id => parseInt(id)) : [],
+      belonging_names: row.belonging_names ? row.belonging_names.split(',') : []
+    }));
+    
+    res.json(events);
+  });
+});
+
+// GET single schedule event by ID
+app.get('/api/schedule/events/:id', (req, res) => {
+  const { id } = req.params;
+  
+  const query = `
+    SELECT se.*, 
+           GROUP_CONCAT(eb.belonging_id) as belonging_ids
+    FROM schedule_events se
+    LEFT JOIN event_belongings eb ON se.id = eb.event_id
+    WHERE se.id = ?
+    GROUP BY se.id
+  `;
+  
+  db.get(query, [id], (err, row) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    
+    if (!row) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    
+    const event = {
+      ...row,
+      belonging_ids: row.belonging_ids ? row.belonging_ids.split(',').map(id => parseInt(id)) : []
+    };
+    
+    res.json(event);
+  });
+});
+
+// POST create new schedule event
+app.post('/api/schedule/events', (req, res) => {
+  const { title, start_time, end_time, day_type, notes = '', belonging_ids = [] } = req.body;
+  
+  if (!title || !start_time || !end_time || !day_type) {
+    res.status(400).json({ error: 'Title, start_time, end_time, and day_type are required' });
+    return;
+  }
+  
+  if (!['packing', 'move-in'].includes(day_type)) {
+    res.status(400).json({ error: 'day_type must be either "packing" or "move-in"' });
+    return;
+  }
+  
+  const now = new Date().toISOString();
+  
+  db.run(
+    'INSERT INTO schedule_events (title, start_time, end_time, day_type, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [title, start_time, end_time, day_type, notes, now, now],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      
+      const eventId = this.lastID;
+      
+      // Link belongings to the event if provided
+      if (belonging_ids.length > 0) {
+        const placeholders = belonging_ids.map(() => '(?, ?, ?)').join(', ');
+        const values = [];
+        belonging_ids.forEach(belongingId => {
+          values.push(eventId, belongingId, now);
+        });
+        
+        db.run(
+          `INSERT INTO event_belongings (event_id, belonging_id, created_at) VALUES ${placeholders}`,
+          values,
+          (err) => {
+            if (err) {
+              res.status(500).json({ error: err.message });
+              return;
+            }
+            
+            // Return the created event with belongings
+            res.status(201).json({ id: eventId, ...req.body, belonging_ids });
+          }
+        );
+      } else {
+        res.status(201).json({ id: eventId, ...req.body, belonging_ids: [] });
+      }
+    }
+  );
+});
+
+// PUT update schedule event
+app.put('/api/schedule/events/:id', (req, res) => {
+  const { id } = req.params;
+  const { title, start_time, end_time, day_type, notes, belonging_ids = [] } = req.body;
+  
+  if (!title || !start_time || !end_time || !day_type) {
+    res.status(400).json({ error: 'Title, start_time, end_time, and day_type are required' });
+    return;
+  }
+  
+  const now = new Date().toISOString();
+  
+  db.run(
+    'UPDATE schedule_events SET title = ?, start_time = ?, end_time = ?, day_type = ?, notes = ?, updated_at = ? WHERE id = ?',
+    [title, start_time, end_time, day_type, notes || '', now, id],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      
+      if (this.changes === 0) {
+        res.status(404).json({ error: 'Event not found' });
+        return;
+      }
+      
+      // Update event-belongings relationships
+      db.run('DELETE FROM event_belongings WHERE event_id = ?', [id], (err) => {
+        if (err) {
+          res.status(500).json({ error: err.message });
+          return;
+        }
+        
+        if (belonging_ids.length > 0) {
+          const placeholders = belonging_ids.map(() => '(?, ?, ?)').join(', ');
+          const values = [];
+          belonging_ids.forEach(belongingId => {
+            values.push(id, belongingId, now);
+          });
+          
+          db.run(
+            `INSERT INTO event_belongings (event_id, belonging_id, created_at) VALUES ${placeholders}`,
+            values,
+            (err) => {
+              if (err) {
+                res.status(500).json({ error: err.message });
+                return;
+              }
+              
+              res.json({ id: parseInt(id), ...req.body });
+            }
+          );
+        } else {
+          res.json({ id: parseInt(id), ...req.body, belonging_ids: [] });
+        }
+      });
+    }
+  );
+});
+
+// DELETE schedule event
+app.delete('/api/schedule/events/:id', (req, res) => {
+  const { id } = req.params;
+  
+  db.run('DELETE FROM schedule_events WHERE id = ?', [id], function(err) {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    
+    if (this.changes === 0) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    
+    res.json({ message: 'Event deleted successfully' });
+  });
+});
+
+// GET belongings for a specific event
+app.get('/api/schedule/events/:id/belongings', (req, res) => {
+  const { id } = req.params;
+  
+  const query = `
+    SELECT b.* 
+    FROM belongings b
+    INNER JOIN event_belongings eb ON b.id = eb.belonging_id
+    WHERE eb.event_id = ?
+    ORDER BY b.name
+  `;
+  
+  db.all(query, [id], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    
+    const belongings = rows.map(row => ({
+      ...row,
+      tags: JSON.parse(row.tags || '[]')
+    }));
+    
+    res.json(belongings);
   });
 });
 
